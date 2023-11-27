@@ -1,6 +1,6 @@
 # 🎄사진이 생성되는 어드벤트 캘린더🎄
 
-[](./readme.png)
+![example](./readme.png)
 created with DALL-E
 
 🌲 오늘 날짜를 이야기하면 D-day와 연말스러운 사진을 생성하는 챗봇을 만드는 프로젝트입니다.
