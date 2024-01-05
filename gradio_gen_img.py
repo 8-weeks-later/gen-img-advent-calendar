@@ -7,6 +7,7 @@ from PIL import Image
 import requests, json
 from openai import OpenAI
 from datetime import datetime
+import base64
 
 with open('api_key.txt') as f:
     private_key = f.read()
@@ -26,27 +27,39 @@ def run_dall_e(message):
     )
     return response.data[0].url
 
-# A helper function to convert the PIL image to base64
-def base64_to_pil(image_url):
+# convert response to PIL image
+def response_to_pil(image_url):
     response = requests.get(image_url)
     img = Image.open(BytesIO(response.content))
     return img
 
-# From prompt to base64 image output 
+# convert the PIL image to base64
+def image_to_base64(pil_image):
+    buffer = BytesIO()
+    pil_image.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
+
+# generate image
 def gen_img(date, input_prompt):
     try:
-        # 이 부분 테스트해보고 보완하기
-        prompt = f"A winter picture matching {date} and mood of this conversation : {input_prompt}"
+        prompt = f"A winter picture matching {date} and mood of this conversation: {input_prompt}"
         output = run_dall_e(prompt)
-        result_image = base64_to_pil(output)
-        return result_image
+        result_image = response_to_pil(output)
+        base64_image = image_to_base64(result_image)
+        return base64_image
     except Exception as e:
         print(f"Error generating image: {e}")
         return None
-
+    
 # Convert turn to prompt
 def convert_history_to_prompt(message, chat_history):
-    prompt = []
+    guide = """
+        You're a bot that needs to ask questions to guess the mood of the user's input message. 
+        Please answer of the user's input message in one or two sentences. 
+        In response to user's third message, please don't ask questions.
+    """
+    prompt = [{"role": "system", "content": guide}]
+    prompt.append({"role":"assistant", "content":"How was your day?"})
     for turn in chat_history:
         user_message, bot_message = turn
         prompt.append({"role":"user", "content":user_message})
@@ -54,47 +67,42 @@ def convert_history_to_prompt(message, chat_history):
     prompt.append({"role":"user", "content": message})
     return prompt
 
-# Basic chatbot endpoint
-def chatbot_response(message, chat_history):
+# generate chatbot response
+def chatbot_response(message, chat_history):    
     input_prompt = convert_history_to_prompt(message, chat_history)
-    print(len(chat_history))
-    if len(chat_history) < 2:
-        response = client.chat.completions.create(model="gpt-3.5-turbo", messages=input_prompt)
+    if len(chat_history) < 3:
+        response = client.chat.completions.create(model="gpt-4", messages=input_prompt)
         bot_message = response.choices[0].message.content
+        if len(chat_history) == 2:
+            question = "Okay, I will make an image for you. Is there any specific object you want to see in the image?"
+            bot_message += f"<br><br>{question}"
         chat_history.append((message, bot_message))
-        return "", chat_history
     else:
-        # Extract mood from the message
-        image = gen_img(datetime.today().strftime("%Y-%m-%d"), input_prompt)
-        return "", image
-
+        image_base64 = gen_img(datetime.today().strftime("%Y-%m-%d"), input_prompt)
+        image_html = f"<img src='data:image/png;base64,{image_base64}'/>" if image_base64 else "Failed to generate image."
+        bot_message = f"This is the image I made for you:)"
+        image_html += f"<br><br>{bot_message}"
+        chat_history.append((message, image_html))
+    return "", chat_history
 
 with gr.Blocks() as demo:
+    date = datetime.today().strftime("%Y-%m-%d")
     gr.Markdown(
-        """
+        f"""
         # 🎄Image Advent Calendar🎄
-        Generate image for the end of the year.
+        Hello! I am image advent calendar. <br>
+        I can generate an image for you. <br>
+        Today is {date}. <br>
+        How was your day?
         """
     )
-    # count 변수로 output 포맷 구분하기
-    # turn_count = gr.State([])
-    chatbot = gr.Chatbot() #just to fit the notebook
-    msg = gr.Textbox(label="Prompt")
+    
+    chatbot = gr.Chatbot(label="Conversation")
+    msg = gr.Textbox(label="User Input")
     btn = gr.Button("Submit")
-    clear = gr.ClearButton(components=[msg, chatbot], value="Clear console")
 
     btn.click(chatbot_response, [msg, chatbot], [msg, chatbot])
-    msg.submit(chatbot_response, [msg, chatbot], [msg, chatbot]) #Press enter to submit
-
-
+    msg.submit(chatbot_response, [msg, chatbot], [msg, chatbot])
+    
 gr.close_all()
-demo.launch(share=True)
-
-
-# demo = gr.Interface(fn=gen_img,
-#                     inputs=[gr.Textbox(label="Your prompt")],
-#                     outputs=[gr.Image(label="Result")],
-#                     title="🎄Image Advent Calendar🎄",
-#                     description="Generate image for the end of the year",
-#                     allow_flagging="never",
-#                     examples=["christmas tree in a cozy room","Twinkling lights on a winter street"])
+demo.launch()
