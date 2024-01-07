@@ -44,9 +44,7 @@ def gen_img(date, input_prompt):
     try:
         prompt = f"A winter picture matching {date} and mood of this conversation: {input_prompt}"
         output = run_dall_e(prompt)
-        result_image = response_to_pil(output)
-        base64_image = image_to_base64(result_image)
-        return base64_image
+        return output
     except Exception as e:
         print(f"Error generating image: {e}")
         return None
@@ -78,8 +76,8 @@ def chatbot_response(message, chat_history):
             bot_message += f"<br><br>{question}"
         chat_history.append((message, bot_message))
     else:
-        image_base64 = gen_img(datetime.today().strftime("%Y-%m-%d"), input_prompt)
-        image_html = f"<img src='data:image/png;base64,{image_base64}'/>" if image_base64 else "Failed to generate image."
+        image_url = gen_img(datetime.today().strftime("%Y-%m-%d"), input_prompt)
+        image_html = f"<img src='{image_url}'/>"
         bot_message = f"This is the image I made for you:)"
         image_html += f"<br><br>{bot_message}"
         chat_history.append((message, image_html))
@@ -105,4 +103,4 @@ with gr.Blocks() as demo:
     msg.submit(chatbot_response, [msg, chatbot], [msg, chatbot])
     
 gr.close_all()
-demo.launch()
+demo.launch(share=True)
